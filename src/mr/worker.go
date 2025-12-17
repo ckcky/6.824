@@ -31,14 +31,14 @@ func ihash(key string) int {
 // main/mrworker.go calls this function.
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
-	log.Println("enter:", funcName())
+	MyPrintf("enter: \n", funcName())
 
 	// Your worker implementation here.
 	// uncomment to send the Example RPC to the coordinator.
 	// CallExample()
 
 	task := RequestTaskFromCoordinator()
-
+	MyPrintf("enter: %s, % +v \n", funcName(), task)
 	switch task.TaskType {
 	case "Map":
 		mDate, err := ioutil.ReadFile(task.FileName)
@@ -47,17 +47,20 @@ func Worker(mapf func(string, string) []KeyValue,
 		}
 		kva := mapf(task.FileName, string(mDate))
 		SaveIntermediate(kva, task.Id, task.NReduce)
-		ReportDone(task.Id)
+		ReportDone(task.Id, task.TaskType)
 	case "Reduce":
+		MyPrintf("enter: Reduce %d %d \n", task.Id, task.NMap)
 		kva := ReadIntermediateFiles(task.Id, task.NMap)
 		sort.Slice(kva, func(i, j int) bool {
 			return kva[i].Key < kva[j].Key
 		})
 		doReduce(task.Id, kva, reducef)
-		ReportDone(task.Id)
+		ReportDone(task.Id, task.TaskType)
 	case "Wait":
-		time.Sleep(time.Second)
+		MyPrintf("等待任务中。。。。。。。 \n")
+		time.Sleep(10 * time.Second)
 	case "Exit":
+		MyPrintf("终止。。。。。。。  \n\n")
 		break
 	}
 
@@ -66,7 +69,7 @@ func Worker(mapf func(string, string) []KeyValue,
 // 批量reduce
 func doReduce(reduceID int, kva []KeyValue,
 	reducef func(string, []string) string) {
-	log.Println("enter:", funcName())
+	MyPrintf("enter: %s \n", funcName())
 	tmpfile, _ := ioutil.TempFile("", "mr-out-*")
 
 	i := 0
@@ -90,19 +93,19 @@ func doReduce(reduceID int, kva []KeyValue,
 	tmpfile.Close()
 	os.Rename(tmpfile.Name(),
 		fmt.Sprintf("mr-out-%d", reduceID))
-	log.Println("写入 reduce 文件: mr-out-%d", reduceID)
+	MyPrintf("写入 reduce 文件: mr-out-%d \n", reduceID)
 
 }
 
 // 读取 map中间文件结果
 func ReadIntermediateFiles(id int, nMap int) []KeyValue {
-	log.Println("enter:", funcName())
+	MyPrintf("enter:%s \n", funcName())
 
 	intermediate := []KeyValue{}
 
 	for mapID := 0; mapID < nMap; mapID++ {
 		filename := fmt.Sprintf("mr-%d-%d", mapID, id)
-		log.Println("读取 map中间文件:", filename)
+		MyPrintf("读取 map中间文件:%s \n", filename)
 		file, err := os.Open(filename)
 		if err != nil {
 			// 可能 Map 还没完成，直接跳过
@@ -133,7 +136,7 @@ func SaveIntermediate(kva []KeyValue, taskId int, nReduce int) {
 	}
 	for r := 0; r < nReduce; r++ {
 		filename := fmt.Sprintf("mr-%d-%d", taskId, r)
-		log.Println("写入 map中间文件:", filename)
+		MyPrintf("写入 map中间文件:%s \n", filename)
 
 		file, _ := os.Create(filename)
 
@@ -146,9 +149,9 @@ func SaveIntermediate(kva []KeyValue, taskId int, nReduce int) {
 }
 
 // rpc 回报回执
-func ReportDone(id int) error {
-	log.Println("enter:", funcName())
-	args := &ReportTaskArgs{TaskId: id}
+func ReportDone(id int, taskType string) error {
+	MyPrintf("enter:%s \n", funcName())
+	args := &ReportTaskArgs{TaskId: id, TaskType: taskType}
 	ok := call("Coordinator.ReportTask", &args, &ReportTaskReply{})
 	if !ok {
 		fmt.Println("RPC call failed")
@@ -159,14 +162,14 @@ func ReportDone(id int) error {
 
 // rpc请求任务
 func RequestTaskFromCoordinator() Task {
-	log.Println("enter:", funcName())
+	MyPrintf("enter:%s \n", funcName())
 	args := &GetTaskArgs{}
 	reply := &GetTaskReply{}
 	ok := call("Coordinator.GetTask", args, reply)
 	if !ok {
 		fmt.Println("RPC call failed")
 	}
-	log.Printf("reply:% +v", reply)
+	MyPrintf("reply:% +v", reply)
 
 	return Task{
 		Id:       reply.TaskId,
@@ -203,7 +206,7 @@ func CallExample() {
 // returns false if something goes wrong.
 func call(rpcname string, args interface{}, reply interface{}) bool {
 	// c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
-	log.Println("enter:", funcName())
+	MyPrintf("enter: %s \n", funcName())
 	sockname := coordinatorSock()
 	log.Println("coordinatorSock: ", sockname)
 	c, err := rpc.DialHTTP("unix", sockname)

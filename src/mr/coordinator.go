@@ -1,7 +1,6 @@
 package mr
 
 import (
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -65,7 +64,8 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 			reply.NReduce = c.NReduce
 			reply.NMap = c.NMap
 
-			fmt.Printf("返回map任务 %+v\n", *reply)
+			task.Status = Running
+			MyPrintf("返回map任务 %+v\n", *reply)
 
 			return nil
 		}
@@ -76,6 +76,7 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 	for _, task := range c.Maptask {
 		if task.Status != Completed {
 			reply.TaskType = "Wait"
+			MyPrintf("仍然有未完成的任务 %+v\n", task)
 			return nil
 		}
 	}
@@ -92,6 +93,9 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 			reply.FileNames = task.FileName
 			reply.NReduce = c.NReduce
 			reply.NMap = c.NMap
+			task.Status = Running
+			MyPrintf("分配reduce任务 %+v\n", task)
+			return nil
 		}
 	}
 
@@ -99,6 +103,8 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 	for _, task := range c.ReduceTask {
 		if task.Status != Completed {
 			reply.TaskType = "Wait"
+			MyPrintf("仍然有未完成的Reduce任务 %+v\n", task)
+			return nil
 		}
 	}
 
@@ -110,18 +116,20 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 func (c *Coordinator) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	MyPrintf("回报回执%s  返回map任务 %+v \n", args.TaskType, *args)
 	switch args.TaskType {
 	case "Map":
 		task := &c.Maptask[args.TaskId]
 		if task.Status == Running {
 			task.Status = Completed
 		}
-
+		MyPrintf("map子任务完成 +%v \n", task)
 	case "Reduce":
 		task := &c.ReduceTask[args.TaskId]
 		if task.Status == Running {
 			task.Status = Completed
 		}
+		MyPrintf("Reduce 子任务完成 +%v \n", task)
 	}
 	return nil
 }
@@ -175,7 +183,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 
 	//加载map任务
 	for i, file := range files {
-		fmt.Println("加载Map任务 %d", i)
+		//fmt.Println("加载Map任务 %d", i)
 		c.Maptask = append(c.Maptask, Task{
 			Id:       i,
 			Status:   Idle,
@@ -186,14 +194,15 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 
 	//加载reduce任务
 	for i := 0; i < nReduce; i++ {
-		fmt.Println("加载Map任务 %d", i)
+		//fmt.Println("加载Reduce任务 %d", i)
 		c.ReduceTask = append(c.ReduceTask, Task{
 			Id:     i,
 			Status: Idle,
 			Start:  time.Now(),
-			// FileName: "",
 		})
 	}
+
+	MyPrintf("Coordinator 加载完成 +%v \n", c)
 
 	c.NReduce = nReduce
 	c.NMap = len(files)
