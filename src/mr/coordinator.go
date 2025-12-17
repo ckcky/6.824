@@ -20,10 +20,13 @@ const (
 )
 
 type Task struct {
+	TaskType string // "Map" "Reduce"
 	Id       int
 	Status   TaskStatus
 	Start    time.Time
 	FileName string //Map task
+	NReduce  int
+	NMap     int
 }
 type Coordinator struct {
 	// Your definitions here.
@@ -31,6 +34,7 @@ type Coordinator struct {
 	Maptask    []Task
 	ReduceTask []Task
 	NReduce    int
+	NMap       int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -55,12 +59,14 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 			task.Status = Running
 			task.Start = time.Now()
 
-			reply = &GetTaskReply{
-				TaskType:  "Map",
-				TaskId:    task.Id,
-				FileNames: task.FileName,
-				NReduce:   c.NReduce,
-			}
+			reply.TaskType = "Map"
+			reply.TaskId = task.Id
+			reply.FileNames = task.FileName
+			reply.NReduce = c.NReduce
+			reply.NMap = c.NMap
+
+			fmt.Printf("返回map任务 %+v\n", *reply)
+
 			return nil
 		}
 
@@ -69,7 +75,7 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 	//检查map任务是否完成
 	for _, task := range c.Maptask {
 		if task.Status != Completed {
-			reply = &GetTaskReply{TaskType: "Wait"}
+			reply.TaskType = "Wait"
 			return nil
 		}
 	}
@@ -81,23 +87,22 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 			task.Status = Running
 			task.Start = time.Now()
 
-			reply = &GetTaskReply{
-				TaskType:  "Reduce",
-				TaskId:    task.Id,
-				FileNames: task.FileName,
-				NReduce:   c.NReduce,
-			}
+			reply.TaskType = "Reduce"
+			reply.TaskId = task.Id
+			reply.FileNames = task.FileName
+			reply.NReduce = c.NReduce
+			reply.NMap = c.NMap
 		}
 	}
 
 	//检查Reduce 任务是否完成
 	for _, task := range c.ReduceTask {
 		if task.Status != Completed {
-			reply = &GetTaskReply{TaskType: "Wait"}
+			reply.TaskType = "Wait"
 		}
 	}
 
-	reply = &GetTaskReply{TaskType: "Done"}
+	reply.TaskType = "Done"
 	return nil
 }
 
@@ -174,20 +179,24 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 		c.Maptask = append(c.Maptask, Task{
 			Id:       i,
 			Status:   Idle,
-			Start:    time.Time{},
+			Start:    time.Now(),
 			FileName: file,
 		})
 	}
 
 	//加载reduce任务
 	for i := 0; i < nReduce; i++ {
+		fmt.Println("加载Map任务 %d", i)
 		c.ReduceTask = append(c.ReduceTask, Task{
 			Id:     i,
 			Status: Idle,
-			Start:  time.Time{},
+			Start:  time.Now(),
 			// FileName: "",
 		})
 	}
+
+	c.NReduce = nReduce
+	c.NMap = len(files)
 	c.server()
 	return &c
 }
